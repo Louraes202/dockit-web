@@ -31,3 +31,71 @@ body {
     text-wrap: balance;
   }
 }
+
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 50;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.5s forwards;
+}
+
+.fade-out {
+  animation: fadeOut 0.5s forwards;
+}
+
+.form-container {
+  position: relative;
+  transition: opacity 0.5s, transform 0.5s;
+}
+
+.form-enter {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.form-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.form-exit {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.form-exit-active {
+  opacity: 0;
+  transform: translateY(-20px);
+}
+
+.modal-container {
+  transition: height 0.5s ease-in-out;
+}
