@@ -1,5 +1,5 @@
 import Image from "next/image";
-import "@/app/styles/background.scss";
+import "@/styles/background.scss";
 
 export default function Home() {
   return (

@@ -6,11 +6,20 @@ import {
   getAuth,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
+  onAuthStateChanged,
+  User,
 } from "firebase/auth";
-import { auth } from "@/db/firebaseConfig";
+import { getFirestore, doc, setDoc } from "firebase/firestore";
+
+import { auth, app } from "@/db/firebaseConfig";
 import { Spinner } from "flowbite-react";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged, User } from "firebase/auth";
+import { Avatar } from "./avatar";
+import { signOut } from "firebase/auth";
+import { CloseOutlined } from "@ant-design/icons";
 
 type Props = {};
 
@@ -18,6 +27,12 @@ export const Navbar = ({}: Props) => {
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
   const [activeItem, setActiveItem] = useState<string>("Home");
   const [showModal, setShowModal] = useState<boolean>(false);
+  const [showUPanel, setShowUPanel] = useState<boolean>(false);
+  const [showPSettings, setShowPSettings] = useState<boolean>(false);
+  const [closingPSettings, setClosingPSettings] = useState<boolean>(false);
+  const [showLoginWarningModal, setShowLoginWarningModal] =
+    useState<boolean>(false);
+  const [rememberMe, setRememberMe] = useState<boolean>(false);
   const [modalAnimation, setModalAnimation] = useState("");
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -25,6 +40,8 @@ export const Navbar = ({}: Props) => {
   const [user, setUser] = useState<User | null>(null);
   const [confirmPassword, setConfirmPassword] = useState("");
   const router = useRouter();
+
+  const db = getFirestore(app);
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
@@ -42,6 +59,15 @@ export const Navbar = ({}: Props) => {
     setTimeout(() => setShowModal(false), 300); // Tempo deve corresponder à duração da animação
   };
 
+  const openUPanel = () => {
+    setShowUPanel(true);
+  };
+
+  // Fechar o modal com fade out
+  const closeUPanel = () => {
+    setShowUPanel(false);
+  };
+
   const toggleForm = () => {
     setIsLogin(!isLogin);
   };
@@ -50,38 +76,59 @@ export const Navbar = ({}: Props) => {
     setActiveItem(item);
   };
 
+  const handleDashboard = (user: User | null) => {
+    if (user) {
+      router.push("/dashboard");
+    } else {
+      setShowLoginWarningModal(true);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+      setUser(null);
+      router.push("/"); // Redireciona para a página inicial após logout
+    } catch (error) {
+      console.error("Erro ao fazer logout:", error);
+    }
+  };
+
+  const handlePSettingsClose = () => {
+    setClosingPSettings(true);
+    setTimeout(() => {
+      setShowPSettings(false);
+      setClosingPSettings(false);
+    }, 300); // Tempo para a animação de fade-out
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     setError("");
-
+  
     const email = e.currentTarget.email.value;
     const password = e.currentTarget.password.value;
-
-    if (!isLogin && password !== confirmPassword) {
-      setError("Passwords do not match.");
-      setLoading(false);
-      return;
-    }
-
+  
     try {
+      // Define a persistência da sessão com base no rememberMe
+      await setPersistence(auth, rememberMe ? browserLocalPersistence : browserSessionPersistence);
+  
       let userCredential;
       if (isLogin) {
-        userCredential = await signInWithEmailAndPassword(
-          auth,
-          email,
-          password
-        );
+        userCredential = await signInWithEmailAndPassword(auth, email, password);
       } else {
-        userCredential = await createUserWithEmailAndPassword(
-          auth,
-          email,
-          password
-        );
+        userCredential = await createUserWithEmailAndPassword(auth, email, password);
+  
+        // Adicionar username no Firestore
+        await setDoc(doc(db, "users", userCredential.user.uid), {
+          username: (user !== null) ? user.email?.split("@")[0] : "",
+          email: (user !== null) ? user.email : "",
+        });
       }
       setUser(userCredential.user);
       closeModal();
-      router.push("/create-profile");
+      router.push("/dashboard");
     } catch (err: any) {
       const errorMessage = err.message.replace(/Firebase: /i, "");
       setError(errorMessage);
@@ -144,7 +191,44 @@ export const Navbar = ({}: Props) => {
           </ul>
           {user ? (
             <div className="hidden lg:inline-block lg:ml-auto lg:mr-3 py-1 px-4 text-sm text-white font-bold transition duration-200">
-              {user.email?.split("@")[0]}
+              <a
+                href="#"
+                onClick={() => {
+                  setShowUPanel(!showUPanel);
+                }}
+              >
+                {user.email?.split("@")[0]}
+              </a>
+              {showPSettings && (
+                <div
+                  className={`absolute mt-2 ${
+                    closingPSettings ? "fade-out" : "fade-in"
+                  }`}
+                >
+                  <div
+                    id="tooltip-bottom"
+                    role="tooltip"
+                    className="relative z-10 flex-row px-5 py-3 text-sm font-medium text-white bg-gray-900 rounded-lg shadow-sm opacity-100"
+                    style={{ transform: "translateX(-50%)" }}
+                  >
+                    <button
+                      onClick={handlePSettingsClose} // Função para fechar o tooltip
+                      className="absolute top-2 right-2 text-white bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm w-6 h-6 flex items-center justify-center"
+                    >
+                      <CloseOutlined />
+                    </button>
+                    You can change your profile details on the dashboard.
+                    <div className="tooltip-arrow" data-popper-arrow></div>
+                  </div>
+                </div>
+              )}
+              {showUPanel && (
+                <Avatar
+                  userName={user.email?.split("@")[0]}
+                  userEmail={user.email ? user.email : "Not found"}
+                  onSignOut={handleSignOut}
+                />
+              )}
             </div>
           ) : (
             <a
@@ -158,6 +242,7 @@ export const Navbar = ({}: Props) => {
           )}
           <a
             className="hidden lg:inline-block py-1 px-4 bg-gray-50 text-sm text-gray-900 hover:text-white hover:bg-blue-500 font-bold rounded-xl transition duration-200"
+            onClick={() => handleDashboard(user)}
             href="#"
           >
             Dashboard
@@ -268,6 +353,7 @@ export const Navbar = ({}: Props) => {
                               id="remember"
                               type="checkbox"
                               value=""
+                              onChange={(e) => setRememberMe(e.target.checked)}
                               className="w-4 h-4 border border-gray-300 rounded bg-gray-50 focus:ring-3 focus:ring-blue-300 dark:bg-gray-600 dark:border-gray-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 dark:focus:ring-offset-gray-800"
                             />
                           </div>
@@ -334,6 +420,76 @@ export const Navbar = ({}: Props) => {
             </div>
           </div>
         )}
+        {/* Login warning modal */}
+        <div
+          id="login-warning-modal"
+          className={`fixed inset-0 z-50 flex items-center justify-center w-full h-full ${
+            showLoginWarningModal ? "" : "hidden"
+          } fade-in`}
+        >
+          <div className="relative p-4 w-full max-w-md max-h-full">
+            <div className="relative bg-white rounded-lg shadow dark:bg-gray-700">
+              <button
+                type="button"
+                className="absolute top-3 right-2.5 text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm w-8 h-8 inline-flex justify-center items-center dark:hover:bg-gray-600 dark:hover:text-white"
+                onClick={() => setShowLoginWarningModal(false)}
+              >
+                <svg
+                  className="w-3 h-3"
+                  aria-hidden="true"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 14 14"
+                >
+                  <path
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M1 1l6 6m0 0l6 6M7 7l6-6M7 7l-6 6"
+                  />
+                </svg>
+                <span className="sr-only">Close modal</span>
+              </button>
+              <div className="p-4 md:p-5 text-center">
+                <svg
+                  className="mx-auto mb-4 text-gray-400 w-12 h-12 dark:text-gray-200"
+                  aria-hidden="true"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M10 11V6m0 8h.01M19 10a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+                  />
+                </svg>
+                <h3 className="mb-5 text-lg font-normal text-gray-500 dark:text-gray-400">
+                  You need to log in to access the dashboard.
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowLoginWarningModal(false);
+                    openModal();
+                  }}
+                  className="text-white bg-blue-600 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 dark:focus:ring-blue-800 font-medium rounded-lg text-sm inline-flex items-center px-5 py-2.5 text-center"
+                >
+                  Log In
+                </button>
+                <button
+                  onClick={() => setShowLoginWarningModal(false)}
+                  className="py-2.5 px-5 ml-3 text-sm font-medium text-gray-900 focus:outline-none bg-white rounded-lg border border-gray-200 hover:bg-gray-100 hover:text-blue-700 focus:z-10 focus:ring-4 focus:ring-gray-100 dark:focus:ring-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-600 dark:hover:text-white dark:hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        {/* Mobile Menu */}
         {isMenuOpen && (
           <div className="navbar-menu relative z-50">
             <div className="navbar-backdrop fixed inset-0 bg-gray-800 opacity-25"></div>
