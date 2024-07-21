@@ -1,9 +1,11 @@
 import Image from "next/image";
 import "@/styles/background.scss";
+import { Navbar } from "@/components/navbar";
 
 export default function Home() {
   return (
     <main>
+      <Navbar></Navbar>
       <div className="py-2 flex items-center justify-center text-center">
         <div className="px-20 py-32 space-y-2">
           <h1 className="text-3xl lg:text-3xl xl:text-4xl font-bold ">A new way to create your documents</h1>
